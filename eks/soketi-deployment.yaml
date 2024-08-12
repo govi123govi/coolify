@@ -1,0 +1,126 @@
+---
+# PersistentVolume for EFS
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: soketi-pv
+  namespace: coolify
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: efs-sc
+  nfs:
+    path: /soketi
+    server: fs-0d92c30ec4b8f2220.efs.us-east-1.amazonaws.com
+  persistentVolumeReclaimPolicy: Retain
+---
+# PersistentVolumeClaim for Soketi Data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: soketi-data
+  namespace: coolify
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: efs-sc
+---
+# Secret Configuration for Soketi
+apiVersion: v1
+kind: Secret
+metadata:
+  name: soketi-secret
+  namespace: coolify
+type: Opaque
+data:
+  PUSHER_APP_ID: MTlmMmM1NWI4MmQzODk2YzA3MDg3OGZmNmIyYTUwYzZiOTQ1ODBiZWQwNzFjMTQ5YTU0ZDVjMzI1MWY4M2YwNw==  # Updated Base64 encoded value of Pusher App ID
+  PUSHER_APP_KEY: NmNhMjUzMjU2Mjg1ODJlYTdiMWY4N2ZlZTQ3MTc3NzgwMjFkZWQ3OTQ2NzYwMWIwYTYwYzhkYTZiMDFhZmVlYQ==  # Updated Base64 encoded value of Pusher App Key
+  PUSHER_APP_SECRET: NmFhYzUzOGM0ZDc4YzBlZmMxMjNiNTNjMGRkZmIwNDEwOGM4YjZiNWRiZjMyYTIwYjUzNjA0N2Y4NGYyODU5ZQ==  # Updated Base64 encoded value of Pusher App Secret
+---
+# StatefulSet Configuration for Soketi
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: soketi
+  namespace: coolify
+spec:
+  serviceName: "soketi"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: soketi
+  template:
+    metadata:
+      labels:
+        app: soketi
+    spec:
+      containers:
+      - name: soketi
+        image: quay.io/soketi/soketi:1.6-16-alpine
+        args: ["--bind", "0.0.0.0"]
+        ports:
+        - containerPort: 6001
+          name: soketi-port
+        volumeMounts:
+        - name: soketi-data
+          mountPath: /app/data
+        env:
+        - name: SOKETI_DEBUG
+          value: "false"  # Set to "true" if debugging is needed
+        - name: SOKETI_DEFAULT_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: soketi-secret
+              key: PUSHER_APP_ID
+        - name: SOKETI_DEFAULT_APP_KEY
+          valueFrom:
+            secretKeyRef:
+              name: soketi-secret
+              key: PUSHER_APP_KEY
+        - name: SOKETI_DEFAULT_APP_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: soketi-secret
+              key: PUSHER_APP_SECRET
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 6001
+            host: 0.0.0.0
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 10
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: 6001
+            host: 0.0.0.0
+          initialDelaySeconds: 40
+          periodSeconds: 20
+          timeoutSeconds: 2
+          failureThreshold: 10
+      volumes:
+      - name: soketi-data
+        persistentVolumeClaim:
+          claimName: soketi-data
+---
+# Service Configuration for Soketi
+apiVersion: v1
+kind: Service
+metadata:
+  name: soketi
+  namespace: coolify
+spec:
+  ports:
+  - port: 6001
+    targetPort: 6001
+  selector:
+    app: soketi
+  type: ClusterIP
+

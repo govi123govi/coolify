@@ -1,0 +1,115 @@
+---
+# PersistentVolume for Redis
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-pv
+  namespace: coolify
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: efs-sc
+  nfs:
+    path: /redis
+    server: fs-0d92c30ec4b8f2220.efs.us-east-1.amazonaws.com
+  persistentVolumeReclaimPolicy: Retain
+---
+# PersistentVolumeClaim for Redis
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: coolify
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Secret for Redis credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-secret
+  namespace: coolify
+type: Opaque
+data:
+  REDIS_PASSWORD: R3VqamFyQDIy  # Base64 encoded value of your Redis password (e.g., Gujjar@22)
+---
+# ConfigMap for Redis configuration (if needed)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: coolify
+data:
+  # You can add Redis configuration options here if needed
+---
+# StatefulSet for Redis
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: coolify
+spec:
+  serviceName: "redis"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:alpine
+        ports:
+        - containerPort: 6379
+        args:
+        - redis-server
+        - "--requirepass"
+        - "$(REDIS_PASSWORD)"
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: REDIS_PASSWORD
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        readinessProbe:
+          exec:
+            command: ["redis-cli", "-a", "$(REDIS_PASSWORD)", "ping"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command: ["redis-cli", "-a", "$(REDIS_PASSWORD)", "ping"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data
+---
+# Headless Service for Redis
+apiVersion: v1
+kind: Service
+metadata:
+  name: coolify-redis
+  namespace: coolify
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+  clusterIP: None

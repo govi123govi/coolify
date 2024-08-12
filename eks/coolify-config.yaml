@@ -1,0 +1,162 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coolify-config
+  namespace: coolify
+data:
+  APP_ENV: "production"
+  APP_DEBUG: "false"
+  APP_NAME: "Coolify"
+  APP_URL: "http://coolify.example.com"
+  DB_CONNECTION: "postgres"
+  DB_HOST: "postgres.coolify.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_DATABASE: "coolify"
+  DB_USERNAME: "coolify"
+  QUEUE_CONNECTION: "redis"
+  REDIS_HOST: "redis.coolify.svc.cluster.local"
+  REDIS_PASSWORD: "Gujjar@22"  # Direct value here, will be in Secret for sensitive info
+  PHP_MEMORY_LIMIT: "256M"
+  APP_ID: "your-app-id"
+  HORIZON_BALANCE: "100"
+  HORIZON_MAX_PROCESSES: "10"
+  HORIZON_BALANCE_MAX_SHIFT: "30"
+  HORIZON_BALANCE_COOLDOWN: "60"
+  SSL_MODE: "off"
+  PHP_PM_CONTROL: "dynamic"
+  PHP_PM_START_SERVERS: "1"
+  PHP_PM_MIN_SPARE_SERVERS: "1"
+  PHP_PM_MAX_SPARE_SERVERS: "10"
+  PUSHER_HOST: "pusher.example.com"
+  PUSHER_BACKEND_HOST: "pusher-backend.example.com"
+  PUSHER_PORT: "443"
+  PUSHER_BACKEND_PORT: "443"
+  PUSHER_SCHEME: "https"
+  PUSHER_APP_ID: "cHVzaGVyX2FwcF9pZA=="  # Base64 encoded value
+  PUSHER_APP_KEY: "cHVzaGVyX2FwcF9rZXk="  # Base64 encoded value
+  PUSHER_APP_SECRET: "cHVzaGVyX2FwcF9zZWNyZXQ="  # Base64 encoded value
+  AUTOUPDATE: "true"
+  SELF_HOSTED: "false"
+  SSH_MUX_PERSIST_TIME: "600"
+  FEEDBACK_DISCORD_WEBHOOK: "https://discord.com/api/webhooks/..."
+  WAITLIST: "false"
+  SUBSCRIPTION_PROVIDER: "stripe"
+  STRIPE_API_KEY: "your-stripe-api-key"
+  STRIPE_WEBHOOK_SECRET: "your-stripe-webhook-secret"
+  STRIPE_PRICE_ID_BASIC_MONTHLY: "price_1234"
+  STRIPE_PRICE_ID_BASIC_YEARLY: "price_5678"
+  STRIPE_PRICE_ID_PRO_MONTHLY: "price_91011"
+  STRIPE_PRICE_ID_PRO_YEARLY: "price_121314"
+  STRIPE_PRICE_ID_ULTIMATE_MONTHLY: "price_151617"
+  STRIPE_PRICE_ID_ULTIMATE_YEARLY: "price_181920"
+  STRIPE_PRICE_ID_DYNAMIC_MONTHLY: "price_212223"
+  STRIPE_PRICE_ID_DYNAMIC_YEARLY: "price_242526"
+  STRIPE_PRICE_ID_BASIC_MONTHLY_OLD: "price_272829"
+  STRIPE_PRICE_ID_BASIC_YEARLY_OLD: "price_303132"
+  STRIPE_PRICE_ID_PRO_MONTHLY_OLD: "price_333435"
+  STRIPE_PRICE_ID_PRO_YEARLY_OLD: "price_363738"
+  STRIPE_PRICE_ID_ULTIMATE_MONTHLY_OLD: "price_394041"
+  STRIPE_PRICE_ID_ULTIMATE_YEARLY_OLD: "price_424344"
+  STRIPE_EXCLUDED_PLANS: "basic,pro"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: coolify-secrets
+  namespace: coolify
+type: Opaque
+data:
+  APP_KEY: YmFzZTY0OmRHaHBjeTFwY3kxaExYSmhibVJ2YlMxaGNIQXRhMlY1  # Base64 encoded value
+  DB_PASSWORD: R3VqamFyQDIy  # Base64 encoded value of 'Gujjar@22'
+  REDIS_PASSWORD: R3VqamFyQDIy  # Base64 encoded value of 'Gujjar@22'
+  PUSHER_APP_ID: cHVzaGVyX2FwcF9pZA==  # Base64 encoded value
+  PUSHER_APP_KEY: cHVzaGVyX2FwcF9rZXk=  # Base64 encoded value
+  PUSHER_APP_SECRET: cHVzaGVyX2FwcF9zZWNyZXQ=  # Base64 encoded value
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coolify
+  namespace: coolify
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coolify
+  template:
+    metadata:
+      labels:
+        app: coolify
+    spec:
+      containers:
+      - name: coolify
+        image: "ghcr.io/coollabsio/coolify:latest"
+        ports:
+        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: coolify-config  # Environment variables from ConfigMap
+        - secretRef:
+            name: coolify-secrets  # Environment variables from Secret
+        volumeMounts:
+        - name: secret-file
+          mountPath: /var/www/html/.env  # Mount the secret file here
+          subPath: .env
+        - name: storage
+          mountPath: /var/www/html/storage
+      volumes:
+      - name: secret-file
+        secret:
+          secretName: coolify-secrets  # Mount the Secret as a file
+      - name: storage
+        persistentVolumeClaim:
+          claimName: coolify-storage-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coolify
+  namespace: coolify
+spec:
+  selector:
+    app: coolify
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: coolify-storage-pv
+  namespace: coolify
+spec:
+  accessModes:
+    - ReadWriteMany
+  capacity:
+    storage: 10Gi
+  storageClassName: efs-sc
+  nfs:
+    server: fs-0d92c30ec4b8f2220.efs.us-east-1.amazonaws.com
+    path: /coolify
+  persistentVolumeReclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coolify-storage-pvc
+  namespace: coolify
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: efs-sc
+

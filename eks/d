@@ -1,0 +1,112 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coolify-config
+  namespace: coolify
+data:
+  .env: |
+    APP_ENV=local
+    APP_DEBUG=true
+    APP_KEY=base64:vRQlCcZH1wSFmuFiuCcpcAc29VyjsCAS1OtciDoj0g8=
+    DB_CONNECTION=pgsql
+    DB_HOST=postgres.coolify.svc.cluster.local
+    DB_PORT=5432
+    DB_DATABASE=coolify
+    DB_USERNAME=coolify
+    DB_PASSWORD=Gujjar@22
+    REDIS_HOST=coolify-redis
+    REDIS_PASSWORD=Gujjar@22
+    REDIS_PORT=6379
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coolify-additional-config
+  namespace: coolify
+data:
+  APP_ID: ""
+  HORIZON_BALANCE: ""
+  HORIZON_MAX_PROCESSES: ""
+  HORIZON_BALANCE_MAX_SHIFT: ""
+  HORIZON_BALANCE_COOLDOWN: ""
+  SSL_MODE: "off"
+  PHP_PM_CONTROL: "dynamic"
+  PHP_PM_START_SERVERS: "1"
+  PHP_PM_MIN_SPARE_SERVERS: "1"
+  PHP_PM_MAX_SPARE_SERVERS: "10"
+  PUSHER_HOST: ""
+  PUSHER_BACKEND_HOST: ""
+  PUSHER_PORT: ""
+  PUSHER_BACKEND_PORT: ""
+  PUSHER_SCHEME: ""
+  PUSHER_APP_ID: ""
+  PUSHER_APP_KEY: ""
+  PUSHER_APP_SECRET: ""
+  AUTOUPDATE: ""
+  SELF_HOSTED: ""
+  SSH_MUX_PERSIST_TIME: ""
+  FEEDBACK_DISCORD_WEBHOOK: ""
+  WAITLIST: ""
+  SUBSCRIPTION_PROVIDER: ""
+  STRIPE_API_KEY: ""
+  STRIPE_WEBHOOK_SECRET: ""
+  STRIPE_PRICE_ID_BASIC_MONTHLY: ""
+  STRIPE_PRICE_ID_BASIC_YEARLY: ""
+  STRIPE_PRICE_ID_PRO_MONTHLY: ""
+  STRIPE_PRICE_ID_PRO_YEARLY: ""
+  STRIPE_PRICE_ID_ULTIMATE_MONTHLY: ""
+  STRIPE_PRICE_ID_ULTIMATE_YEARLY: ""
+  STRIPE_PRICE_ID_DYNAMIC_MONTHLY: ""
+  STRIPE_PRICE_ID_DYNAMIC_YEARLY: ""
+  STRIPE_PRICE_ID_BASIC_MONTHLY_OLD: ""
+  STRIPE_PRICE_ID_BASIC_YEARLY_OLD: ""
+  STRIPE_PRICE_ID_PRO_MONTHLY_OLD: ""
+  STRIPE_PRICE_ID_PRO_YEARLY_OLD: ""
+  STRIPE_PRICE_ID_ULTIMATE_MONTHLY_OLD: ""
+  STRIPE_PRICE_ID_ULTIMATE_YEARLY_OLD: ""
+  STRIPE_EXCLUDED_PLANS: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coolify
+  namespace: coolify
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coolify
+  template:
+    metadata:
+      labels:
+        app: coolify
+    spec:
+      containers:
+        - name: coolify
+          image: ghcr.io/coollabsio/coolify:latest
+          volumeMounts:
+            - name: config-volume
+              mountPath: /var/www/html/.env
+              subPath: .env
+          envFrom:
+            - configMapRef:
+                name: coolify-additional-config
+      volumes:
+        - name: config-volume
+          configMap:
+            name: coolify-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coolify
+  namespace: coolify
+spec:
+  type: NodePort
+  selector:
+    app: coolify
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80

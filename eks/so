@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: soketi-config
+  namespace: coolify
+data:
+  SOKETI_DEBUG: "true"
+  SOKETI_DEFAULT_APP_ID: "19f2c55b82d3896c070878ff6b2a50c6b94580bed071c149a54d5c3251f83f07"
+  SOKETI_DEFAULT_APP_KEY: "6ca25325628582ea7b1f87fee4717778021ded79467601b0a60c8da6b01afeea"
+  SOKETI_DEFAULT_APP_SECRET: "6aac538c4d78c0efc123b53c0ddfb04108c8b6b5dbf32a20b536047f84f2859e"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: soketi-deployment
+  namespace: coolify
+  labels:
+    app: soketi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: soketi
+  template:
+    metadata:
+      labels:
+        app: soketi
+    spec:
+      containers:
+      - name: soketi
+        image: quay.io/soketi/soketi:1.6-16-alpine
+        ports:
+        - containerPort: 6001
+        env:
+        - name: SOKETI_DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: soketi-config
+              key: SOKETI_DEBUG
+        - name: SOKETI_DEFAULT_APP_ID
+          valueFrom:
+            configMapKeyRef:
+              name: soketi-config
+              key: SOKETI_DEFAULT_APP_ID
+        - name: SOKETI_DEFAULT_APP_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: soketi-config
+              key: SOKETI_DEFAULT_APP_KEY
+        - name: SOKETI_DEFAULT_APP_SECRET
+          valueFrom:
+            configMapKeyRef:
+              name: soketi-config
+              key: SOKETI_DEFAULT_APP_SECRET
+        volumeMounts:
+        - name: soketi-storage
+          mountPath: /soketi
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 6001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: 6001
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - name: soketi-storage
+        persistentVolumeClaim:
+          claimName: soketi-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: soketi-service
+  namespace: coolify
+spec:
+  selector:
+    app: soketi
+  ports:
+  - protocol: TCP
+    port: 6001
+    targetPort: 6001
+    nodePort: 30001  # Specify a NodePort value
+  type: NodePort  # Set the service type to NodePort
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: soketi-pv
+  namespace: coolify
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: efs-sc
+  nfs:
+    path: /soketi
+    server: fs-0d92c30ec4b8f2220.efs.us-east-1.amazonaws.com
+  persistentVolumeReclaimPolicy: Retain
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: soketi-data
+  namespace: coolify
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: efs-sc
+

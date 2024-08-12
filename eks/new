@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coolify-config
+  namespace: coolify
+data:
+  .env: |
+    APP_ENV=local
+    APP_DEBUG=true
+    APP_URL=http://localhost
+    APP_KEY=base64:YOUR_APP_KEY
+    DB_CONNECTION=pgsql
+    DB_HOST=postgres.coolify.svc.cluster.local
+    DB_PORT=5432
+    DB_DATABASE=coolify
+    DB_USERNAME=coolify
+    DB_PASSWORD=Gujjar@22
+    REDIS_HOST=coolify-redis
+    REDIS_PASSWORD=Gujjar@22
+    REDIS_PORT=6379
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coolify
+  namespace: coolify
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coolify
+  template:
+    metadata:
+      labels:
+        app: coolify
+    spec:
+      containers:
+        - name: coolify
+          image: ghcr.io/coollabsio/coolify:latest
+          volumeMounts:
+            - name: config-volume
+              mountPath: /var/www/html/.env
+              subPath: .env
+      volumes:
+        - name: config-volume
+          configMap:
+            name: coolify-config
+
